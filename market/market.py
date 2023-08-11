@@ -3,7 +3,7 @@ import datetime
 import logging
 import time
 import queue
-from typing import Any
+from typing import *
 from PyQt5.QtCore import QMutex, QMutexLocker
 
 from .decorators import trace
@@ -51,19 +51,19 @@ class Market():
         self._sig.account_number_request_signal.emit()
 
     @trace
-    def get_condition(self) -> list[dict[str, Any]]:
+    def get_condition(self) -> List[Dict[str, Any]]:
         """
         조건검색식을 로드하고 각각의 이름과 인덱스를 반환합니다.
 
         Returns
         -------
-        list[dict[str, Any]]
+        List[Dict[str, Any]]
             dict의 list를 반환합니다.
             각 dict는 조건검색식을 의미합니다.
             
-            dict = {
-                'index': int,
-                'name': str
+            Dict = {
+                'name': str,
+                'index': int,  
             }
         """
         
@@ -74,7 +74,7 @@ class Market():
         return condition_list
 
     @trace
-    def get_matching_stocks(self, condition_name: str, condition_index: int) -> list[str]:
+    def get_matching_stocks(self, condition_name: str, condition_index: int) -> List[str]:
         """
         주어진 조건검색식과 부합하는 주식 코드의 리스트를 반환합니다.
 
@@ -87,7 +87,7 @@ class Market():
 
         Returns
         -------
-        list[str]
+        List[str]
             부합하는 주식 종목의 코드 리스트를 반환합니다.
         """
         
@@ -117,7 +117,7 @@ class Market():
         return deposit
 
     @trace
-    def get_balance(self) -> dict[str, dict[str, Any]]:
+    def get_balance(self) -> Dict[str, Dict[str, Any]]:
         """
         보유주식정보를 반환합니다.
         
@@ -126,9 +126,9 @@ class Market():
 
         Returns
         -------
-        dict[str, dict[str, Any]]
+        Dict[str, Dict[str, Any]]
             보유주식정보를 반환합니다.
-            dict[stock_code] = {
+            Dict[stock_code] = {
                 '종목명': str,
                 '수량': int,
                 '매매가능수량': int,
@@ -145,13 +145,13 @@ class Market():
         return balance
     
     @trace
-    def request_order(self, order_dict: dict[str, Any]) -> str:
+    def request_order(self, order_dict: Dict[str, Any]) -> str:
         """
         주문을 전송합니다.
 
         Parameters
         ----------
-        order_dict : dict[str, Any]
+        order_dict : Dict[str, Any]
             order_dict = {
                 '구분': '매도' or '매수',
                 '주식코드': str,
@@ -175,7 +175,7 @@ class Market():
         return order_number
  
     @trace
-    def get_order_info(self, order_number: str) -> dict[str, str]:
+    def get_order_info(self, order_number: str) -> Dict[str, str]:
         """
         주문 번호을 가지고 주문 정보를 얻어옵니다.
         만약 주문이 전부 체결되지 않았다면 체결될 때까지 기다립니다.
@@ -187,7 +187,7 @@ class Market():
 
         Returns
         -------
-        dict[str, str]
+        Dict[str, str]
             주문 정보입니다.
         """
         lock = QMutex()
@@ -198,13 +198,13 @@ class Market():
         return order_info 
     
     @trace
-    def register_price_info(self, stock_code_list: list[str], is_add: bool = False) -> None:
+    def register_price_info(self, stock_code_list: List[str], is_add: bool = False) -> None:
         """
         주어진 주식 코드에 대한 실시간 가격 정보를 등록합니다.
 
         Parameters
         ----------
-        stock_code_list : list[str]
+        stock_code_list : List[str]
             실시간 정보를 등록하고 싶은 주식의 코드 리스트입니다.
         is_add : bool, optional
             True일시 화면번호에 존재하는 기존의 등록은 사라집니다.
@@ -214,13 +214,13 @@ class Market():
         self._sig.price_register_request_signal.emit(stock_code_list, is_add)
 
     @trace
-    def register_ask_bid_info(self, stock_code_list: list[str], is_add: bool = False) -> None:
+    def register_ask_bid_info(self, stock_code_list: List[str], is_add: bool = False) -> None:
         """
         주어진 주식 코드에 대한 실시간 호가 정보를 등록합니다.
 
         Parameters
         ----------
-        stock_code_list : list[str]
+        stock_code_list : List[str]
             실시간 정보를 등록하고 싶은 주식의 코드 리스트입니다.
         is_add : bool, optional
             True일시 화면번호에 존재하는 기존의 등록은 사라집니다.
@@ -230,7 +230,7 @@ class Market():
         self._sig.ask_bid_register_request_signal.emit(stock_code_list, is_add)
 
     @trace
-    def get_price_info(self, stock_code: str) -> dict[str, Any]:
+    def get_price_info(self, stock_code: str) -> Dict[str, Any]:
         """
         주어진 주식 코드에 대한 실시간 가격 정보를 가져옵니다.
         주식시장이 과열되면 일정시간동안 거래가 중지되어 정보가 들어오지 않을 수 있습니다.
@@ -242,7 +242,7 @@ class Market():
 
         Returns
         -------
-        dict[str, Any]
+        Dict[str, Any]
             주어진 주식 코드의 실시간 가격 정보입니다.
             info_dict = {
                 '체결시간': str (HHMMSS),
@@ -266,10 +266,11 @@ class Market():
             logger.warning('!!! 실시간 체결 데이터의 시간이 실제 시간과 큰 차이가 있습니다. !!!')
             logger.warning('!!! 주식이 상/하한가이거나 과열될 경우 일어날 수 있습니다. !!!')
             logger.warning(f'!!! {stock_code} - {info_time} vs {cur_time} !!!')
+            
         return price_info
     
     @trace
-    def get_ask_bid_info(self, stock_code: str) -> dict[str, Any]:
+    def get_ask_bid_info(self, stock_code: str) -> Dict[str, Any]:
         """
         주어진 주식 코드에 대한 실시간 호가 정보를 가져옵니다.
         주식시장이 과열되면 일정시간동안 거래가 중지되어 정보가 들어오지 않을 수 있습니다.
@@ -281,12 +282,12 @@ class Market():
 
         Returns
         -------
-        dict[str, Any]
+        Dict[str, Any]
             주어진 주식 코드의 실시간 호가 정보입니다.
            info_dict = {
                 '호가시간': str (HHMMSS),
-                '매수호가정보': list[tuple[int, int]],
-                '매도호가정보': list[tuple[int, int]],
+                '매수호가정보': List[Tuple[int, int]],
+                '매도호가정보': List[Tuple[int, int]],
             }
             
             매수호가정보는 (가격, 수량)의 호가정보가 리스트에 1번부터 10번까지 순서대로 들어있습니다.
@@ -306,6 +307,7 @@ class Market():
             logger.warning('!!! 실시간 호가 데이터의 시간이 실제 시간과 큰 차이가 있습니다. !!!')
             logger.warning('!!! 주식이 상/하한가이거나 과열될 경우 일어날 수 있습니다. !!!')
             logger.warning(f'!!! {stock_code} - {info_time} vs {cur_time} !!!')
+        
         return ask_bid_info
             
     

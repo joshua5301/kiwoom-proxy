@@ -43,7 +43,7 @@ class ServerSignalHandler():
         if result == 0:
             logger.info('성공적으로 로그인했습니다.')
         else:
-            logger.critical(f'!!! 로그인에 실패하였습니다. - err_code {result} !!!')
+            raise ConnectionError(f'!!! 로그인에 실패하였습니다. - err_code {result} !!!')
         self._data.buffer_for_login_result.put(result, block=False)
     
     @trace
@@ -105,7 +105,7 @@ class ServerSignalHandler():
             self._data.request_name_to_tr_data[request_name].put(order_number, block=False)
             
         else:
-            logger.error(f'!!! 아직 구현되지 않은 TR 코드 - {tr_code} 입니다. !!!')
+            raise NotImplementedError(f'!!! 아직 구현되지 않은 TR 코드 - {tr_code} 입니다. !!!')
 
     @trace
     def _condition_result_handler(self, is_success: int, msg: str) -> None:
@@ -124,7 +124,7 @@ class ServerSignalHandler():
         if is_success == 1:
             logger.info('조건검색식이 준비되었습니다.')
         else:
-            logger.error(f'!!! 조건검색식을 불러오는 준비에 실패하였습니다. - err_code: {is_success} !!!')
+            raise ConnectionError(f'!!! 조건검색식을 불러오는 준비에 실패하였습니다. err_code - {is_success} !!!')
         
         condition_list = []
         result = self._ocx.get_condition_name_list()
@@ -132,7 +132,7 @@ class ServerSignalHandler():
         for index_and_name in index_and_name_list:
             index = int(index_and_name.split('^')[0])
             name = index_and_name.split('^')[1]
-            condition_list.append({'index': index, 'name': name})
+            condition_list.append({'name': name, 'index': index})
         self._data.buffer_for_condition_list.put(condition_list, block=False)
 
     @trace
@@ -174,20 +174,33 @@ class ServerSignalHandler():
             ';'로 구분되어 있습니다.
         """
         if data_type == '0':
-            fid_list = fid_list.split(';')[:-1]
-            info_dict = {}
-            for fid in fid_list:
-                info = self._ocx.get_chejan_data(fid)
-                if fid in FID_TO_KOR_NAME:
-                    info_dict[FID_TO_KOR_NAME[fid]] = info.strip('+- ')
+            stock_code = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드'])
+            stock_name = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목명'])
+            order_status = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문상태'])
+            order_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문수량'])
+            traded_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결량'])
+            order_number = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문번호'])
+            info_dict = {
+                '종목코드': stock_code.strip(),
+                '종목명': stock_name.strip(),
+                '주문상태': order_status.strip(),
+                '주문수량': int(order_amount.strip('+- ')),
+                '체결량': int(traded_amount.strip('+- ')),
+                '주문번호': order_number.strip(),
+            }
             if info_dict['주문상태'] == '체결' and info_dict['체결량'] == info_dict['주문수량']:
-                logger.info(f'주문이 완전히 체결되었습니다. - {info_dict["주문번호"]}')
+                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 완전히 체결되었습니다.')
                 self._data.order_number_to_info[info_dict['주문번호']] = info_dict
                 self._data.order_info_ready.wakeAll()
+            else:
+                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 일부 체결되었습니다.')
+                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 체결량: {info_dict["체결량"]}, 주문수량: {info_dict["주문수량"]}')
+
         elif data_type == '1':
             logger.info('잔고가 변경되었습니다')
+
         elif data_type == '4':
-            logger.error('!!! 파생잔고 변경은 구현되지 않았습니다. !!!')
+            raise NotImplementedError('!!! 파생잔고 변경은 아직 구현되지 않았습니다. !!!')
 
     @trace
     def _real_data_handler(self, stock_code: str, signal_type: str, unused) -> None:
@@ -250,14 +263,9 @@ class ServerSignalHandler():
         # 장외주식체결
         elif signal_type == 'ECN주식체결':
             pass
-        # 왜 이런 신호가 오는거지? .... 1
-        elif signal_type == '주식예상체결':
-            pass
-        # 왜 이런 신호가 오는거지? .... 2
-        elif signal_type == '주식종목정보':
-            pass
+        # 왜 이런 신호가 오는거지? ...
         else:
-            logger.error(f'!!! 예상치 못한 signal_type - {signal_type}이 전송되었습니다. !!!')
+            logger.warning(f'!!! 예상치 못한 signal_type - {signal_type}이 전송되었습니다. !!!')
     
     @trace
     def _server_msg_handler(self, screen_no: str, request_name: str, tr_code: str, msg: str) -> None:

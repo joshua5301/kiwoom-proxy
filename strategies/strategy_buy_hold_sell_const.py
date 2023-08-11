@@ -4,7 +4,7 @@ import random
 WAIT_SECOND = 10
 
 # 매수 후 보유하고 있는 시간
-HOLD_SECOND = 300
+HOLD_SECOND = 30
 
 # 투자할 수량
 STOCK_NUM = 10

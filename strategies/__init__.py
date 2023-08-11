@@ -1,1 +1,1 @@
-from .strategy_factory import StrategyFactory
+from .strategy_manager import StrategyManager

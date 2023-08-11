@@ -1,7 +1,6 @@
 import os
-import datetime
 import time
-import copy
+from typing import *
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -14,8 +13,19 @@ from .market import MarketManager
 from .analyzer_const import RECORD_INTERVAL, RESAMPLE_INTERVAL
 
 class Analyzer(QThread):
-    
-    def __init__(self, stock_universe: list[str]):
+    """
+    Strategy를 통해 이루어진 거래 결과를 분석하는 클래스
+    """
+
+    def __init__(self, stock_universe: List[str]):
+        """
+        정보를 기록할 주식들을 받고 이에 대한 정보를 저장할 dict를 초기화합니다.
+
+        Parameters
+        ----------
+        stock_universe : List[str]
+            Analyzer가 정보를 기록하게 될 모든 주식입니다.
+        """
         super().__init__()
         self.is_finished = False
         self.stock_universe = stock_universe
@@ -40,6 +50,8 @@ class Analyzer(QThread):
     def run(self):
         """
         일정 주기마다 계좌 정보와 strategy에 의해 등록된 실시간 주식 정보를 기록합니다.
+
+        start 메소드에 의해 새로운 쓰레드에서 호출됩니다.
         """
         market = MarketManager.get_market()
         while self.is_finished is False:
@@ -50,7 +62,7 @@ class Analyzer(QThread):
                 price_info = market.get_price_info(stock_code)
                 self.price_history[stock_code]['price'].append(price_info['현재가'])
                 self.price_history[stock_code]['time'].append(price_info['체결시간'])
-                self.price_history[stock_code]['avg_buy_price'].append(np.NaN)
+                self.balance_history[stock_code]['avg_buy_price'].append(np.NaN)
 
             # 잔고 정보를 기록합니다.
             balance = market.get_balance()
@@ -66,22 +78,19 @@ class Analyzer(QThread):
                     ask_sum += price * amount
                 for price, amount in ask_bid_info['매수호가정보']:
                     bid_sum += price * amount
-                self.ask_bid_history['total_ask_amount'].append(ask_sum)
-                self.ask_bid_history['total_bid_amount'].append(bid_sum)
-                self.ask_bid_history['time'].append(ask_bid_info['호가시간'])
-
-
-            
+                self.ask_bid_history[stock_code]['total_ask_amount'].append(ask_sum)
+                self.ask_bid_history[stock_code]['total_bid_amount'].append(bid_sum)
+                self.ask_bid_history[stock_code]['time'].append(ask_bid_info['호가시간'])      
                 
-    def stop(self):
+    def stop(self) -> None:
         """
         정보 수집을 멈춥니다.
         """
         self.is_finished = True
     
-    def analyze_transaction(self):
+    def analyze_transaction(self) -> None:
         """
-        거래 내역과 시장 정보를 가지고 결과를 분석합니다.
+        잔고 내역과 시장 정보를 가지고 결과를 분석합니다.
         분석 결과는 output 폴더에 그래프로 저장됩니다.
         """
         current_path = os.path.dirname(os.path.abspath(__file__))

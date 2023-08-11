@@ -1,8 +1,10 @@
 import time
 import math
+from typing import *
 from PyQt5.QtCore import QThread
 
 from ..market import MarketManager
+from .strategy import Strategy
 from .strategy_sangdda_const import *
 
 class TraderThread(QThread):
@@ -14,7 +16,8 @@ class TraderThread(QThread):
         self.target_stock_code = target_stock_code
 
     def run(self):
-        market = MarketManager.get_market()
+        print('시작!')
+        market = MarketManager().get_market()
         # 매수 신호 포착
         while True:
             time.sleep(0.5)
@@ -31,7 +34,6 @@ class TraderThread(QThread):
             if ask_sum > BID_MULTIPLIER * bid_sum:
                 print(f'{self.target_stock_code} 매수합니다. - {ask_sum} > {BID_MULTIPLIER} * {bid_sum}')
                 price_info = market.get_price_info(self.target_stock_code)
-                print('price_info를 가져왔습니다.')
                 amount = math.floor(INVESTMENT_PER_STOCK / price_info['현재가'])
                 if amount == 0:
                     print('!!! 수량이 0입니다. !!!')
@@ -78,17 +80,30 @@ class TraderThread(QThread):
                 pass
 
 
-class StrategySangDDa(QThread):
+class StrategySangDDa(Strategy):
     """
     상한가 따라잡기 전략
     """
     
-    def __init__(self, stock_universe: list[str]):
-        super().__init__()
-        self.stock_universe = stock_universe
-    
-    def run(self):
+    def initialize_stock_universe(self) -> None:
+        """
+        Stock universe와 관련된 초기화 작업을 진행합니다.
+        """
+        # stock universe를 설정합니다.
+        market = MarketManager().get_market()
+        condition = market.get_condition()
+        matching_stocks = market.get_matching_stocks(condition[0]['name'], condition[0]['index'])
+        self.stock_universe = matching_stocks
 
+        # stock universe의 실시간 정보를 받겠다고 등록합니다.
+        market.register_price_info(self.stock_universe)
+        market.register_ask_bid_info(self.stock_universe)
+        
+
+    def start_strategy(self) -> None:
+        """
+        전략을 시작합니다.
+        """
         # universe의 각 종목에 대하여 일대일로 매수와 매도 판단을 내리는 TraderThread를 만듭니다.
         thread_list = []
         for stock_code in self.stock_universe:
@@ -100,4 +115,6 @@ class StrategySangDDa(QThread):
         # 모든 TraderThread가 끝날 때까지 기다립니다.
         for thread in thread_list:
             thread.wait()
+
+        self.finished.emit()
         

@@ -21,8 +21,8 @@ class MarketManager():
         반드시 main thread에서 호출되어야 합니다.
         """
         if MarketManager._market is not None:
-            logger.error('!!! KiwoomMarket 객체는 한번만 생성되어야 합니다. !!!')
-            return
+            raise RuntimeError('!!! KiwoomMarket 객체는 한번만 생성되어야 합니다. !!!')
+
         self._app = QApplication([])
         self._data = MarketData()
         self._ocx = KiwoomOCX()
@@ -41,8 +41,7 @@ class MarketManager():
             클래스의 유일한 객체를 반환합니다.
         """
         if MarketManager._market is None:
-            logger.error('!!! KiwoomMarket 객체가 아직 생성되지 않았습니다. !!!')
-            return
+            raise AttributeError('!!! KiwoomMarket 객체가 아직 생성되지 않았습니다. !!!')
         return MarketManager._market
     
     _is_started = False
@@ -53,7 +52,6 @@ class MarketManager():
         반드시 main thread에서 호출되어야 합니다.
         """
         if MarketManager._is_started is True:
-            logger.error('!!! KiwoomMarket 객체는 한번만 시작되어야 합니다. !!!')
-            return
+            raise RuntimeError('!!! KiwoomMarket 객체는 한번만 시작되어야 합니다. !!!')
         MarketManager._is_started = True
         self._app.exec()

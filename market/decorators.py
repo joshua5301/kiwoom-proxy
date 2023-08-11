@@ -3,7 +3,7 @@ import time
 import datetime
 import threading
 from PyQt5.QtCore import QThread, QMutex, QMutexLocker
-from typing import Callable
+from typing import *
 
 def trace(func: Callable) -> Callable:
     """
