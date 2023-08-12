@@ -13,7 +13,6 @@ class Manager(QThread):
 
     def run(self):
         
-        # market을 초기화합니다.
         market_manager = MarketManager()
         market = market_manager.get_market()
         market.initialize()
@@ -21,7 +20,11 @@ class Manager(QThread):
         # 전략을 관리하는 클래스를 만들고 전략을 시작합니다.
         strategy_manager = StrategyManager('SangDDa')
         strategy_manager.start_strategy()
+
+        # stock universe의 실시간 정보를 받겠다고 등록합니다.
         stock_universe = strategy_manager.get_stock_universe()
+        market.register_price_info(stock_universe)
+        market.register_ask_bid_info(stock_universe)
 
         # 정보를 수집하고 분석하는 쓰레드를 만들고 시작합니다.
         analyzer = Analyzer(stock_universe)

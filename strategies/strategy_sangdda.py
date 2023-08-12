@@ -94,10 +94,6 @@ class StrategySangDDa(Strategy):
         condition = market.get_condition()
         matching_stocks = market.get_matching_stocks(condition[0]['name'], condition[0]['index'])
         self.stock_universe = matching_stocks
-
-        # stock universe의 실시간 정보를 받겠다고 등록합니다.
-        market.register_price_info(self.stock_universe)
-        market.register_ask_bid_info(self.stock_universe)
         
 
     def start_strategy(self) -> None:

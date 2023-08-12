@@ -1,7 +1,6 @@
 import logging
 from typing import *
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtCore import pyqtSignal, QObject
 
 from .decorators import trace
 from .kiwoom_api_utils import KiwoomAPIUtils
@@ -11,7 +10,7 @@ from .market_data import MarketData
 
 logger = logging.getLogger(__name__)
 
-class ClientSignalHandler(QWidget):
+class ClientSignalHandler(QObject):
     """
     Client로부터 보내진 요청 신호를 처리하는 클래스
     """
