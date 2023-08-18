@@ -53,9 +53,10 @@ class _TraderThread(QThread):
         # 매도 신호 포착
         while True:
             time.sleep(0.5)
-            # 현 종목의 수익률을 가져옵니다.
-            cur_balance = market.get_balance()
-            cur_profit_percentage = cur_balance[self.target_stock_code]['수익률']
+            # 현 종목의 수익률을 계산합니다.
+            cur_price = market.get_price_info(self.target_stock_code)['현재가']
+            cur_balance = market.get_balance()[self.target_stock_code]['매입단가']
+            cur_profit_percentage = (cur_balance / cur_price - 1) * 100
 
             # 만약 매수한 종목의 수익률이 N% 이상이면 익절하고 N% 이하면 손절합니다.
             order_dict = {

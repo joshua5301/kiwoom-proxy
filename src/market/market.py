@@ -45,7 +45,7 @@ class Market():
         """
         while True:
             self._sig.login_request_signal.emit()
-            login_result = self._data.buffer_for_login_result.get()
+            login_result = self._data.login_result.get()
             if login_result == 0:
                 break
         self._sig.account_number_request_signal.emit()
@@ -72,7 +72,7 @@ class Market():
         # 동시에 조건검색식을 요청했다면 이에 대한 응답이 서로 뒤바뀔 수 있습니다.
         # 다만 실제 영향은 미미합니다.
         self._sig.condition_request_signal.emit()
-        condition_list = self._data.buffer_for_condition_list.get()
+        condition_list = self._data.condition_list.get()
         return condition_list
 
     @request_api_method
@@ -119,7 +119,7 @@ class Market():
         del self._data.request_name_to_tr_data[request_name]
         return deposit
     
-    def get_real_balance(self):
+    def get_balance(self) -> Dict[str, Dict[str, Any]]:
         """
         보유주식정보를 반환합니다.
         
@@ -131,16 +131,14 @@ class Market():
         Dict[str, Dict[str, Any]]
             보유주식정보를 반환합니다.
             Dict[stock_code] = {
+                '종목코드': str,
                 '종목명': str,
-                '수량': int,
-                '매매가능수량': int,
-                '매입가': int,
-                '현재가': int,
-                '수익률': float
+                '보유수량': int,
+                '주문가능수량': int,
+                '매입단가': int,
             }
         """
-        balance = self._data.balance
-        return balance
+        return self._data.balance
     
     @order_api_method
     @trace
@@ -189,11 +187,13 @@ class Market():
         Dict[str, str]
             주문 정보입니다.
         """
-        lock = QMutex()
-        with QMutexLocker(lock):
-            while order_number not in self._data.order_number_to_info:
-                self._data.order_info_ready.wait(lock)
-        order_info = self._data.order_number_to_info[order_number]
+
+        while True:
+            try:
+                order_info = self._data.order_number_to_info[order_number]
+                break
+            except KeyError:
+                time.sleep(1)
         return order_info 
     
     @trace
@@ -259,7 +259,7 @@ class Market():
                 time.sleep(1)
         
         cur_time = datetime.datetime.now().replace(year=1900, month=1, day=1)
-        info_time = datetime.datetime.strptime(price_info['체결시간'], '%H%M%S')
+        info_time = price_info['체결시간']
         time_delta = cur_time - info_time
         if time_delta.total_seconds() > 10:
             logger.warning('!!! 실시간 체결 데이터의 시간이 실제 시간과 큰 차이가 있습니다. !!!')
@@ -300,7 +300,7 @@ class Market():
                 time.sleep(1)
         
         cur_time = datetime.datetime.now().replace(year=1900, month=1, day=1)
-        info_time = datetime.datetime.strptime(ask_bid_info['호가시간'], '%H%M%S')
+        info_time = ask_bid_info['호가시간']
         time_delta = cur_time - info_time
         if time_delta.total_seconds() > 10:
             logger.warning('!!! 실시간 호가 데이터의 시간이 실제 시간과 큰 차이가 있습니다. !!!')

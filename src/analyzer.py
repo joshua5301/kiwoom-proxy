@@ -44,7 +44,6 @@ class Analyzer(QThread):
             }
             self.balance_history[stock_code] = {
                 'avg_buy_price': [],
-                'profit_percentage': [],
                 'time': []
             }
 
@@ -71,13 +70,11 @@ class Analyzer(QThread):
             # 잔고 정보를 기록합니다.
             balance = market.get_balance()
             for stock_code in self.stock_universe:
-                self.balance_history[stock_code]['time'].append(datetime.datetime.now().strftime('%H%M%S'))
+                self.balance_history[stock_code]['time'].append(datetime.datetime.now())
                 if stock_code in balance.keys():
-                    self.balance_history[stock_code]['avg_buy_price'].append(balance[stock_code]['매입가'])
-                    self.balance_history[stock_code]['profit_percentage'].append(balance[stock_code]['수익률'])
+                    self.balance_history[stock_code]['avg_buy_price'].append(balance[stock_code]['매입단가'])
                 else:
                     self.balance_history[stock_code]['avg_buy_price'].append(np.NaN)
-                    self.balance_history[stock_code]['profit_percentage'].append(np.NaN)
 
             # 호가 정보를 기록합니다.
             for stock_code in self.stock_universe:
@@ -96,10 +93,9 @@ class Analyzer(QThread):
             for stock_code in self.stock_universe:
                 cur_price = self.price_history[stock_code]['price'][-1]
                 avg_buy_price = self.balance_history[stock_code]['avg_buy_price'][-1]
-                profit_percentage = self.balance_history[stock_code]['profit_percentage'][-1]
                 total_ask_amount = self.ask_bid_history[stock_code]['total_ask_amount'][-1]
                 total_bid_amount = self.ask_bid_history[stock_code]['total_bid_amount'][-1]
-                print(f'{stock_code} - 현재가: {cur_price}, 매입가: {avg_buy_price}, 수익률: {profit_percentage:.2f}, 매도세: {total_ask_amount}, 매수세: {total_bid_amount}')
+                print(f'{stock_code} - 현재가: {cur_price}, 매입가: {avg_buy_price}, 매도세: {total_ask_amount}, 매수세: {total_bid_amount}')
 
         self.final_deposit = market.get_deposit()
         self.final_balance = market.get_balance()
@@ -147,7 +143,6 @@ class Analyzer(QThread):
             
             # 현재가에 대한 ohlc 데이터프레임을 만듭니다.
             price_df = pd.DataFrame(self.price_history[stock_code])
-            price_df['time'] = pd.to_datetime(price_df['time'], format='%H%M%S')
             price_df.set_index('time', inplace=True)
             
             # 리샘플링 후 간격마다 누락된 데이터를 채워넣습니다.
@@ -161,31 +156,30 @@ class Analyzer(QThread):
             ohlc_df['open'].iloc[1:] = ohlc_df['close'].shift(1).iloc[1:]
 
             # 매수가에 대한 addplot을 만듭니다.
-            avg_price_df = pd.DataFrame(self.balance_history[stock_code]).drop('profit_percentage', axis=1)
-            avg_price_df['time'] = pd.to_datetime(avg_price_df['time'], format='%H%M%S')
+            avg_price_df = pd.DataFrame(self.balance_history[stock_code])
             avg_price_df.set_index('time', inplace=True)
-            avg_price_df['avg_buy_price'] = avg_price_df['avg_buy_price'].resample(RESAMPLE_INTERVAL).first()
+            avg_price_df = avg_price_df['avg_buy_price'].resample(RESAMPLE_INTERVAL).first()
             
             # 호가정보에 대한 addplot을 만듭니다.
             ask_bid_df = pd.DataFrame(self.ask_bid_history[stock_code])
-            ask_bid_df['time'] = pd.to_datetime(ask_bid_df['time'], format='%H%M%S')
             ask_bid_df.set_index('time', inplace=True)
-            ask_bid_df['total_ask_amount'] = ask_bid_df['total_ask_amount'].resample(RESAMPLE_INTERVAL).first()
-            ask_bid_df['total_bid_amount'] = -ask_bid_df['total_bid_amount'].resample(RESAMPLE_INTERVAL).first()
+            ask_df = ask_bid_df['total_ask_amount'].resample(RESAMPLE_INTERVAL).first()
+            bid_df = -ask_bid_df['total_bid_amount'].resample(RESAMPLE_INTERVAL).first()
             
             # 각 데이터프레임의 길이를 동일하게 맞춰줍니다.
-            min_len = min(len(ohlc_df), len(avg_price_df), len(ask_bid_df))
+            min_len = min(len(ohlc_df), len(avg_price_df), len(ask_df), len(bid_df))
             ohlc_df = ohlc_df.iloc[:min_len]
             avg_price_df = avg_price_df.iloc[:min_len]
-            ask_bid_df = ask_bid_df.iloc[:min_len]
+            ask_df = ask_df.iloc[:min_len]
+            bid_df = bid_df.iloc[:min_len]
             
             # 메인 데이터프레임과 addplot들을 plot하고 이를 저장합니다.
             market_colors = mpf.make_marketcolors(up='#E71809', down='#115BCB', inherit=True)
             kiwoom_style = mpf.make_mpf_style(marketcolors=market_colors, gridstyle='-', gridcolor='#D8D8D8', gridaxis='horizontal')
             ap = [
                 mpf.make_addplot(data=avg_price_df, panel=0, secondary_y=False, type='line', color='black'),
-                mpf.make_addplot(data=ask_bid_df['total_ask_amount'], panel=1, secondary_y=False, type='bar', color='#115BCB'),
-                mpf.make_addplot(data=ask_bid_df['total_bid_amount'], panel=1, secondary_y=False, type='bar', color='#E71809')
+                mpf.make_addplot(data=ask_df, panel=1, secondary_y=False, type='bar', color='#115BCB'),
+                mpf.make_addplot(data=bid_df, panel=1, secondary_y=False, type='bar', color='#E71809')
             ]
             output_graph_path = os.path.join(output_dir_path, stock_code + '.png')
             mpf.plot(ohlc_df, addplot=ap, type='candle', figratio=(18,10), tight_layout=True, 

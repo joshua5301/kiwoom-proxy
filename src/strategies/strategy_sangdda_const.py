@@ -1,5 +1,5 @@
 # 매도세가 매수세보다 몇배 많아야 매수하는지 결정해주는 값
-BID_MULTIPLIER = 1.5
+BID_MULTIPLIER = 1
 
 # 몇퍼센트 손해일 시 손절하는지 결정해주는 값
 STOP_LOSS_PERCENTAGE = -30
