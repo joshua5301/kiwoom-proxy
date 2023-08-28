@@ -5,4 +5,8 @@ WAIT_SECOND = 5
 HOLD_SECOND = 10
 
 # 투자할 수량
-STOCK_NUM = 10
+STOCK_NUM = 1
+
+# 투자할 주식들
+# 카카오, 삼성전자, 네이버, 셀트리온, 삼성SDI, POSCO
+STOCK_CODES = ('035720', '005930', '035420', '068270', '006400', '005490')

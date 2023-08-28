@@ -181,10 +181,11 @@ class ServerSignalHandler():
             order_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문수량'])
             traded_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결량'])
             order_number = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문번호'])
-            # 흠.. 왜 공백으로 오는걸까
+            
+            # 아마 접수 시에 일부 항목이 공백으로 오는듯.. 제대로된 확인 필요
             if traded_amount.strip() == '':
-                print(stock_code, stock_name, order_status, order_amount, traded_amount, order_number)
-                raise RuntimeError('체결량이 공백으로 전달되었습니다.')
+                # print(stock_code, stock_name, order_status, order_amount, traded_amount, order_number)
+                return
             
             info_dict = {
                 '종목코드': stock_code.strip(),
@@ -210,13 +211,17 @@ class ServerSignalHandler():
             avg_buy_price = self._ocx.get_chejan_data(KOR_NAME_TO_FID['매입단가'])
 
             info_dict = {
-                '종목코드': stock_code.strip(),
+                '종목코드': stock_code.strip()[1:],
                 '종목명': stock_name.strip(),
                 '보유수량': int(total_amount.strip('+- ')),
                 '주문가능수량': int(available_amount.strip('+- ')),
                 '매입단가': int(avg_buy_price.strip('+- ')),
             }
-            self._data.balance[stock_code.strip()] = info_dict
+            if info_dict['보유수량'] == 0:
+                if stock_code.strip()[1:] in self._data.balance:
+                    del self._data.balance[stock_code.strip()[1:]]
+            else:
+                self._data.balance[stock_code.strip()[1:]] = info_dict
 
         elif data_type == '4':
             raise NotImplementedError('!!! 파생잔고 변경은 아직 구현되지 않았습니다. !!!')

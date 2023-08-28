@@ -39,9 +39,10 @@ class Market():
     @trace
     def initialize(self) -> None:
         """
-        주식시장을 초기화(로그인 후 계좌번호를 로드)합니다.
+        주식시장을 초기화합니다.
+        (로그인 -> 계좌번호 로드 -> 초기 잔고 로드)
         
-        다른 메서드를 사용하기 전에 한번만 호출되어야 합니다.
+        다른 메서드를 사용하기 전에 오직 한번만 호출되어야 합니다.
         """
         while True:
             self._sig.login_request_signal.emit()
@@ -49,7 +50,8 @@ class Market():
             if login_result == 0:
                 break
         self._sig.account_number_request_signal.emit()
-        self._sig.balance_request_signal.emit()
+        request_name = KiwoomAPIUtils.create_request_name('GetBalance')
+        self._sig.balance_request_signal.emit(request_name)
 
     @request_api_method
     @trace

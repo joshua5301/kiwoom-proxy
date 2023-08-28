@@ -4,7 +4,7 @@ from PyQt5.QtCore import QThread
 
 from ..market import MarketManager
 from .strategy import Strategy
-from .strategy_buy_hold_sell_const import STOCK_NUM, WAIT_SECOND, HOLD_SECOND
+from .strategy_buy_hold_sell_const import STOCK_NUM, WAIT_SECOND, HOLD_SECOND, STOCK_CODES
 
 class _TraderThread(QThread):
     """
@@ -45,7 +45,7 @@ class StrategyBuyHoldSell(Strategy):
     """
     
     def get_stock_universe(self) -> List[str]:
-        return ['123690', '159910', '217820', '047310']
+        return list(STOCK_CODES)
     
     def run(self):
         stock_universe = self.get_stock_universe()

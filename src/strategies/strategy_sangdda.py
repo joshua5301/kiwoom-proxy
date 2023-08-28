@@ -1,4 +1,5 @@
 import time
+import datetime
 import math
 import logging
 from typing import *
@@ -20,9 +21,12 @@ class _TraderThread(QThread):
 
     def run(self):
         market = MarketManager().get_market()
+        start_time = datetime.datetime.now()
+
         # 매수 신호 포착
         while True:
             time.sleep(0.5)
+
             # 종목의 호가정보를 가져오고 매도세와 매수세를 계산합니다.
             ask_bid_info = market.get_ask_bid_info(self.target_stock_code)
             bid_sum = 0
@@ -49,6 +53,11 @@ class _TraderThread(QThread):
                 request_name = market.request_order(order_dict)
                 _ = market.get_order_info(request_name)
                 break
+
+            # 최대 거래 시간이 지났다면 거래를 종료합니다. 
+            cur_time = datetime.datetime.now()
+            if (cur_time - start_time).total_seconds() > MAX_TRANSACTION_TIME * 60:
+                return
     
         # 매도 신호 포착
         while True:
@@ -59,6 +68,7 @@ class _TraderThread(QThread):
             cur_profit_percentage = (cur_balance / cur_price - 1) * 100
 
             # 만약 매수한 종목의 수익률이 N% 이상이면 익절하고 N% 이하면 손절합니다.
+            # 또한 최대 거래 시간이 지나도 청산합니다.
             order_dict = {
                 '구분': '매도',
                 '주식코드': self.target_stock_code,
@@ -66,11 +76,9 @@ class _TraderThread(QThread):
                 '가격': 0,
                 '시장가': True
             }
-            if cur_profit_percentage > TAKE_PROFIT_PERCENTAGE:
-                request_name = market.request_order(order_dict)
-                _ = market.get_order_info(request_name)
-                break
-            elif cur_profit_percentage < STOP_LOSS_PERCENTAGE:
+            cur_time = datetime.datetime.now()
+            if cur_profit_percentage > TAKE_PROFIT_PERCENTAGE or cur_profit_percentage < STOP_LOSS_PERCENTAGE or \
+               (cur_time - start_time).total_seconds() > MAX_TRANSACTION_TIME * 60:
                 request_name = market.request_order(order_dict)
                 _ = market.get_order_info(request_name)
                 break
