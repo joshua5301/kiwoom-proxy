@@ -19,7 +19,7 @@ class Manager(QThread):
         
         # 전략을 관리하는 클래스를 만들고 전략을 시작합니다.
         strategy_manager = StrategyManager()
-        strategy_manager.create_strategy('SangDDa')
+        strategy_manager.create_strategy('BuyHoldSell')
         strategy_manager.start_strategy()
 
         # stock universe의 실시간 정보를 받겠다고 등록합니다.

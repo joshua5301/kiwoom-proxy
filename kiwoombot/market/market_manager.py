@@ -8,6 +8,7 @@ from .client_signal_handler import ClientSignalHandler
 from .server_signal_handler import ServerSignalHandler
 from .market import Market
 
+
 logger = logging.getLogger(__name__)
 
 class MarketManager():

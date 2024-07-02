@@ -97,12 +97,16 @@ class StrategySangDDa(Strategy):
         """
         전날 상한가에 도달한 주식들을 stock universe로 반환합니다.
         """
+        print('???')
         with QMutexLocker(StrategySangDDa._lock):
             if StrategySangDDa._stock_universe is None:
+                print('why')
                 market = MarketManager().get_market()
                 condition = market.get_condition()
                 matching_stocks = market.get_matching_stocks(condition[0]['name'], condition[0]['index'])
                 StrategySangDDa._stock_universe = matching_stocks
+                print('why12')
+        print('asdf')
         return StrategySangDDa._stock_universe
         
 

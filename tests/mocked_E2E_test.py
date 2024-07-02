@@ -1,16 +1,17 @@
 import sys
-import unittest
 import types
-from .mock_market import MockMarket
 
-mock_module = types.ModuleType('market')
-mock_module.Market = MockMarket
-sys.modules['kiwoom.src.market.market'] = mock_module
+from unittest import main, TestCase
+from .mock_market_manager import MockMarketManager
 
-class MockedE2ETest(unittest.TestCase):
+mock_module = types.ModuleType('mock')
+mock_module.MarketManager = MockMarketManager
+sys.modules['kiwoombot.market.market_manager'] = mock_module
+class MockedE2ETest(TestCase):
 
     def test_main(self):
-        from ..src.__main__ import main
-        
+        from kiwoombot.start import start
+        start()
+
 if __name__ == '__main__':
-    unittest.main()
+    main()

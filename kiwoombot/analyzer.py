@@ -75,7 +75,7 @@ class Analyzer(QThread):
                 if stock_code in balance.keys():
                     self.balance_history[stock_code]['avg_buy_price'].append(balance[stock_code]['매입단가'])
                 else:
-                    self.balance_history[stock_code]['avg_buy_price'].append(np.NaN)
+                    self.balance_history[stock_code]['avg_buy_price'].append(np.nan)
 
             # 호가 정보를 기록합니다.
             for stock_code in self.stock_universe:
