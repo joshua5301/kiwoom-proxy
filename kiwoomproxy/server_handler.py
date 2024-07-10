@@ -1,22 +1,32 @@
 import logging
 import datetime
+import json
+from PyQt5.QtNetwork import QTcpSocket
 
 from .decorators import trace
 from .kiwoom_api_const import KOR_NAME_TO_FID, FID_TO_KOR_NAME
 from .kiwoom_ocx import KiwoomOCX
-from .market_data import MarketData
 
 logger = logging.getLogger(__name__)
 
-class ServerSignalHandler():
+class ServerHandler():
     """
     서버로부터 보내진 수신 신호를 처리하는 클래스
     """
 
-    def __init__(self, ocx: KiwoomOCX, data: MarketData):
-        super().__init__()
+    def __init__(self, ocx: KiwoomOCX, socket: QTcpSocket):
+        """_summary_
+
+        Parameters
+        ----------
+        ocx : KiwoomOCX
+            _description_
+        socket: QTcpSocket
+            Client 측의 요청을 읽기 위한 socket입니다.
+            socket은 미리 연결되어있어야 합니다.
+        """
         self._ocx = ocx
-        self._data = data
+        self._socket = socket
         self._set_signal_slots_for_ocx(self._ocx)
         
     def _set_signal_slots_for_ocx(self, ocx: KiwoomOCX):
@@ -28,6 +38,9 @@ class ServerSignalHandler():
         ocx.OnReceiveRealData.connect(self._real_data_handler)
         ocx.OnReceiveMsg.connect(self._server_msg_handler)
 
+    def _write_to_client(self, data_dict: dict):
+        data = json.dumps(data_dict) + '\n'
+        self._socket.write(data.encode())
 
     @trace
     def _login_result_handler(self, result: int) -> None:
@@ -44,7 +57,7 @@ class ServerSignalHandler():
             logger.info('성공적으로 로그인했습니다.')
         else:
             raise ConnectionError(f'!!! 로그인에 실패하였습니다. - err_code {result} !!!')
-        self._data.login_result.put(result, block=False)
+        self._write_to_client({'type': 'login_result', 'key': '', 'value': result})
     
     @trace
     def _tr_data_handler(self, screen_no: str, request_name: str, tr_code: str, tr_name: str, next_data: int,
@@ -70,7 +83,7 @@ class ServerSignalHandler():
         if tr_code == 'opw00001':
             deposit = self._ocx.get_comm_data(tr_code, request_name, 0, '주문가능금액')
             deposit = int(deposit)
-            self._data.request_name_to_tr_data[request_name].put(deposit, block=False)
+            self._write_to_client({'type': 'deposit', 'key': request_name, 'value': deposit})
         
         # 보유 주식 요청
         elif tr_code == 'opw00018':
@@ -91,10 +104,11 @@ class ServerSignalHandler():
                     '종목명': stock_name.strip(),
                     '보유수량': int(amount),
                     '주문가능수량': int(available_amount),
-                    '매입단가': int(purchased_price),
+                    '매입가': int(purchased_price),
+                    '현재가': int(current_price),
+                    '수익률(%)': float(profit_percentage),
                 }
-            # 결과는 request_name_to_tr_data에 저장되지 않고 _data.balance를 초기화하는 데에 사용됩니다.
-            self._data.balance = balance_dict
+            self._write_to_client({'type': 'balance', 'key': request_name, 'value': balance_dict})
         
         # 주문 요청
         elif tr_code == 'KOA_NORMAL_BUY_KP_ORD' or tr_code == 'KOA_NORMAL_SELL_KP_ORD' or\
@@ -102,7 +116,7 @@ class ServerSignalHandler():
                  
             # 주문 번호를 저장합니다.
             order_number = self._ocx.get_comm_data(tr_code, request_name, 0, '주문번호')
-            self._data.request_name_to_tr_data[request_name].put(order_number, block=False)
+            self._write_to_client({'type': 'accepted_order', 'key': request_name, 'value': order_number})
             
         else:
             raise NotImplementedError(f'!!! 아직 구현되지 않은 TR 코드 - {tr_code} 입니다. !!!')
@@ -133,7 +147,7 @@ class ServerSignalHandler():
             index = int(index_and_name.split('^')[0])
             name = index_and_name.split('^')[1]
             condition_list.append({'name': name, 'index': index})
-        self._data.condition_list.put(condition_list, block=False)
+        self._write_to_client({'type': 'condition_name', 'key': '', 'value': condition_list})
 
     @trace
     def _condition_search_result_handler(self, screen_no: str, stock_codes: str, condition_name: str, 
@@ -155,7 +169,7 @@ class ServerSignalHandler():
             연속 조회가 필요한지 나타내는 값입니다. 0이면 필요없음을, 2이면 필요함을 의미합니다.
         """
         stock_code_list = stock_codes.split(';')[:-1]
-        self._data.condition_name_to_result[condition_name].put(stock_code_list, block=False)
+        self._write_to_client({'type': 'condition_search', 'key': condition_index, 'value': stock_code_list})
 
     @trace
     def _chejan_data_handler(self, data_type: str, info_num: int, fid_list: str) -> None:
@@ -178,30 +192,38 @@ class ServerSignalHandler():
             stock_code = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드'])
             stock_name = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목명'])
             order_status = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문상태'])
+            order_type = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문구분'])
             order_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문수량'])
+            traded_price = self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결가'])
             traded_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결량'])
             order_number = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문번호'])
+            original_order_number = self._ocx.get_chejan_data(KOR_NAME_TO_FID['원주문번호'])
+
+            # 주의) 접수 시에는 일부 항목이 공백으로 옴
+            if order_status.strip() == '접수':
+                logger.info(f'{stock_code.strip()} - 주문이 접수되었습니다.')
             
-            # 아마 접수 시에 일부 항목이 공백으로 오는듯.. 제대로된 확인 필요
-            if traded_amount.strip() == '':
-                # print(stock_code, stock_name, order_status, order_amount, traded_amount, order_number)
-                return
-            
-            info_dict = {
-                '종목코드': stock_code.strip(),
-                '종목명': stock_name.strip(),
-                '주문상태': order_status.strip(),
-                '주문수량': int(order_amount.strip('+- ')),
-                '체결량': int(traded_amount.strip('+- ')),
-                '주문번호': order_number.strip(),
-            }
-            if info_dict['주문상태'] == '체결' and info_dict['체결량'] == info_dict['주문수량']:
-                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 완전히 체결되었습니다.')
-                self._data.order_number_to_info[info_dict['주문번호']] = info_dict
+            elif order_status.strip() == '체결':
+                info_dict = {
+                    '종목코드': stock_code.strip(),
+                    '종목명': stock_name.strip(),
+                    '주문상태': order_status.strip(),
+                    '주문구분': order_type.strip(),
+                    '주문수량': int(order_amount.strip('+- ')),
+                    '체결가': int(traded_price.strip('+- ')),
+                    '체결량': int(traded_amount.strip('+- ')),
+                    '주문번호': order_number.strip(),
+                    '원주문번호': original_order_number.strip(),
+                }
+                if info_dict['체결량'] == info_dict['주문수량']:
+                    logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 완전히 체결되었습니다.')
+                    self._write_to_client({'type': 'completed_order', 'key': info_dict['주문번호'], 'value': info_dict})
+                else:
+                    logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 일부 체결되었습니다.')
+                    logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 체결량: {info_dict["체결량"]}, 주문수량: {info_dict["주문수량"]}')
             else:
-                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 일부 체결되었습니다.')
-                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 체결량: {info_dict["체결량"]}, 주문수량: {info_dict["주문수량"]}')
-        
+                raise NotImplementedError(f'!!! 확인되지 않은 주문 상태 - {order_status.strip()}입니다.!!!')
+
         # 잔고 관련 데이터
         elif data_type == '1':
             stock_code = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드'])
@@ -217,11 +239,8 @@ class ServerSignalHandler():
                 '주문가능수량': int(available_amount.strip('+- ')),
                 '매입단가': int(avg_buy_price.strip('+- ')),
             }
-            if info_dict['보유수량'] == 0:
-                if stock_code.strip()[1:] in self._data.balance:
-                    del self._data.balance[stock_code.strip()[1:]]
-            else:
-                self._data.balance[stock_code.strip()[1:]] = info_dict
+            
+            self._write_to_client({'type': 'balance_change', 'key': info_dict['종목코드'], 'value': info_dict})
 
         elif data_type == '4':
             raise NotImplementedError('!!! 파생잔고 변경은 아직 구현되지 않았습니다. !!!')
@@ -257,7 +276,8 @@ class ServerSignalHandler():
                 '고가': int(high_price.strip('+- ')),
                 '저가': int(low_price.strip('+- ')),
             }
-            self._data.price_info[stock_code] = info_dict
+            
+            self._write_to_client({'type': 'price_change', 'key': stock_code, 'value': info_dict})
 
 
         # 실시간 호가정보를 등록한 뒤 호가의 변경이 일어났을 때 발생하는 signal입니다.
@@ -285,7 +305,7 @@ class ServerSignalHandler():
                 '매수호가정보': bid_info_list,
                 '매도호가정보': ask_info_list,
             }
-            self._data.ask_bid_info[stock_code] = info_dict
+            self._write_to_client({'type': 'ask_bid_change', 'key': stock_code, 'value': info_dict})
 
         # 장외주식호가
         elif signal_type == 'ECN주식호가잔량':

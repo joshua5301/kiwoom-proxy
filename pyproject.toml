@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "kiwoombot"
+name = "kiwoomproxy"
 version = "0.1.0"
 description = ""
 authors = ["joshua5301"]
@@ -9,10 +9,6 @@ readme = "README.md"
 python = "3.10.*"
 pyqt5 = "5.15.10"
 pyqt5-qt5 = "5.15.2"
-pandas = "2.0.3"
-matplotlib = "3.7.5"
-mplfinance = "^0.12.7a17"
-
 
 [build-system]
 requires = ["poetry-core"]
