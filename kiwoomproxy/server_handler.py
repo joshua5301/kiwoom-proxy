@@ -3,7 +3,7 @@ import datetime
 import json
 from PyQt5.QtNetwork import QTcpSocket
 
-from .decorators import trace
+from .utils import trace
 from .kiwoom_api_const import KOR_NAME_TO_FID, FID_TO_KOR_NAME
 from .kiwoom_ocx import KiwoomOCX
 
@@ -15,7 +15,8 @@ class ServerHandler():
     """
 
     def __init__(self, ocx: KiwoomOCX, socket: QTcpSocket):
-        """_summary_
+        """
+        서버 핸들러를 초기화합니다.
 
         Parameters
         ----------
@@ -32,7 +33,7 @@ class ServerHandler():
     def _set_signal_slots_for_ocx(self, ocx: KiwoomOCX):
         ocx.OnEventConnect.connect(self._login_result_handler)
         ocx.OnReceiveTrData.connect(self._tr_data_handler)
-        ocx.OnReceiveConditionVer.connect(self._condition_result_handler)
+        ocx.OnReceiveConditionVer.connect(self._condition_name_result_handler)
         ocx.OnReceiveTrCondition.connect(self._condition_search_result_handler)
         ocx.OnReceiveChejanData.connect(self._chejan_data_handler)
         ocx.OnReceiveRealData.connect(self._real_data_handler)
@@ -95,8 +96,6 @@ class ServerHandler():
                 amount = self._ocx.get_comm_data(tr_code, request_name, i, '보유수량')
                 available_amount = self._ocx.get_comm_data(tr_code, request_name, i, '매매가능수량')
                 purchased_price = self._ocx.get_comm_data(tr_code, request_name, i, '매입가')
-                current_price = self._ocx.get_comm_data(tr_code, request_name, i, '현재가')
-                profit_percentage = self._ocx.get_comm_data(tr_code, request_name, i, '수익률(%)')
                 
                 # stock_code의 맨 앞 문자는 주식의 구분 알파벳이므로 제외합니다.
                 balance_dict[stock_code.strip()[1:]] = {
@@ -104,9 +103,7 @@ class ServerHandler():
                     '종목명': stock_name.strip(),
                     '보유수량': int(amount),
                     '주문가능수량': int(available_amount),
-                    '매입가': int(purchased_price),
-                    '현재가': int(current_price),
-                    '수익률(%)': float(profit_percentage),
+                    '매입단가': int(purchased_price),
                 }
             self._write_to_client({'type': 'balance', 'key': request_name, 'value': balance_dict})
         
@@ -122,7 +119,7 @@ class ServerHandler():
             raise NotImplementedError(f'!!! 아직 구현되지 않은 TR 코드 - {tr_code} 입니다. !!!')
 
     @trace
-    def _condition_result_handler(self, is_success: int, msg: str) -> None:
+    def _condition_name_result_handler(self, is_success: int, msg: str) -> None:
         """
         조건검색식이 요청에 따라 로드되었을 때 호출되는 핸들러입니다.
         
@@ -169,7 +166,7 @@ class ServerHandler():
             연속 조회가 필요한지 나타내는 값입니다. 0이면 필요없음을, 2이면 필요함을 의미합니다.
         """
         stock_code_list = stock_codes.split(';')[:-1]
-        self._write_to_client({'type': 'condition_search', 'key': condition_index, 'value': stock_code_list})
+        self._write_to_client({'type': 'condition_search_result', 'key': condition_name, 'value': stock_code_list})
 
     @trace
     def _chejan_data_handler(self, data_type: str, info_num: int, fid_list: str) -> None:
@@ -277,7 +274,7 @@ class ServerHandler():
                 '저가': int(low_price.strip('+- ')),
             }
             
-            self._write_to_client({'type': 'price_change', 'key': stock_code, 'value': info_dict})
+            self._write_to_client({'type': 'price_info', 'key': stock_code, 'value': info_dict})
 
 
         # 실시간 호가정보를 등록한 뒤 호가의 변경이 일어났을 때 발생하는 signal입니다.
@@ -305,7 +302,7 @@ class ServerHandler():
                 '매수호가정보': bid_info_list,
                 '매도호가정보': ask_info_list,
             }
-            self._write_to_client({'type': 'ask_bid_change', 'key': stock_code, 'value': info_dict})
+            self._write_to_client({'type': 'ask_bid_info', 'key': stock_code, 'value': info_dict})
 
         # 장외주식호가
         elif signal_type == 'ECN주식호가잔량':
@@ -313,7 +310,7 @@ class ServerHandler():
         # 장외주식체결
         elif signal_type == 'ECN주식체결':
             pass
-        # 동시 호가시 예상되는 체결 관련 정보...인듯?
+        # 동시 호가시 예상되는 체결 관련 정보인듯?
         elif signal_type == '주식예상체결':
             pass
         elif signal_type == '장시작시간':

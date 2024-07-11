@@ -1,10 +1,8 @@
 import logging
 import json
-from typing import *
 from PyQt5.QtNetwork import QTcpSocket
 
-from .decorators import trace
-from .kiwoom_api_utils import KiwoomAPIUtils
+from .utils import trace, get_screen_no
 from .kiwoom_api_const import KOR_NAME_TO_FID
 from .kiwoom_ocx import KiwoomOCX
 
@@ -30,18 +28,18 @@ class ClientHandler():
         """
         self._ocx = ocx
         self._account_number = None
-        self.buffer = ''
-        self.socket = socket
-        self.socket.readyRead.connect(self._read_request)
+        self._buffer = ''
+        self._socket = socket
+        self._socket.readyRead.connect(self._read_request)
 
     def _read_request(self):
         """
         Client의 socket으로부터 요청이 도착했을 때 이를 처리합니다.
         """
-        while self.socket.bytesAvailable() > 0:
-            self.buffer += self.socket.readAll().data().decode()
-            while '\n' in self.buffer:
-                line, self.buffer = self.buffer.split('\n', 1)
+        while self._socket.bytesAvailable() > 0:
+            self._buffer += self._socket.readAll().data().decode()
+            while '\n' in self._buffer:
+                line, self._buffer = self._buffer.split('\n', 1)
                 data_dict = json.loads(line)
                 method = getattr(self, data_dict['method'])
                 args = data_dict['args']
@@ -59,7 +57,7 @@ class ClientHandler():
             raise ConnectionError(f'!!! 로그인 시도 요청에 실패하였습니다. err_code - {result}')
             
     @trace
-    def request_account_number(self) -> None:
+    def load_account_number(self) -> None:
         """
         client으로부터 계좌번호 로드 요청을 받았을 때 호출합니다.
         
@@ -70,11 +68,11 @@ class ClientHandler():
         if len(account_list) > 1:
             logger.warning(f'다수의 계정이 검색되었습니다: {account_list}')
             logger.warning(f'첫번째 계정이 선택됩니다.')
-        self.account_number = account_list[0]
+        self._account_number = account_list[0]
         logger.info('계좌번호 로드가 성공하였습니다.')
     
     @trace
-    def request_condition(self) -> None:
+    def request_condition_name(self) -> None:
         """
         client으로부터 조건검색식 요청을 받았을 때 호출합니다.
         
@@ -98,7 +96,7 @@ class ClientHandler():
         condition_index : int
             조건검색식의 인덱스입니다.
         """ 
-        screen_no = KiwoomAPIUtils.get_screen_no()
+        screen_no = get_screen_no()
         is_success = self._ocx.send_condition(screen_no, condition_name, condition_index, 0)
         if is_success == 1:
             logger.info('조건검색식에 부합하는 종목검색에 성공하였습니다.')
@@ -110,10 +108,10 @@ class ClientHandler():
         """
         client으로부터 주문가능금액 조회 요청을 받았을 때 호출합니다.
         """
-        self._ocx.set_input_value('계좌번호', self.account_number)
+        self._ocx.set_input_value('계좌번호', self._account_number)
         self._ocx.set_input_value('비밀번호입력매체구분', '00')
         self._ocx.set_input_value('조회구분', '2')
-        screen_no = KiwoomAPIUtils.get_screen_no()
+        screen_no = get_screen_no()
         result = self._ocx.comm_rq_data(request_name, 'opw00001', 0, screen_no)
         if result == 0:
             logger.info('주문가능금액 조회에 성공하였습니다.')
@@ -125,10 +123,10 @@ class ClientHandler():
         """
         client으로부터 보유주식 조회 요청을 받았을 때 호출합니다.
         """
-        self._ocx.set_input_value('계좌번호', self.account_number)
+        self._ocx.set_input_value('계좌번호', self._account_number)
         self._ocx.set_input_value('비밀번호입력매체구분', '00')
         self._ocx.set_input_value('조회구분', '1')
-        screen_no = KiwoomAPIUtils.get_screen_no()
+        screen_no = get_screen_no()
         result = self._ocx.comm_rq_data(request_name, 'opw00018', 0, screen_no)
         if result == 0:
             logger.info('보유주식 조회 요청에 성공하였습니다.')
@@ -136,7 +134,7 @@ class ClientHandler():
             raise RuntimeError(f'!!! 보유주식 조회 요청에 실패하였습니다. err_code - {result}!!!')
     
     @trace
-    def request_order(self, order_dict: Dict[str, Any], request_name: str) -> None:
+    def request_order(self, order_dict: dict, request_name: str) -> None:
         """
         client으로부터 주문을 전송하겠다는 요청을 받았을 때 호출합니다.
         Parameters
@@ -152,7 +150,7 @@ class ClientHandler():
                 '시장가': bool
             }
         """
-        screen_no = KiwoomAPIUtils.get_screen_no()
+        screen_no = get_screen_no()
         
         # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
         if order_dict['구분'] == '매수':
@@ -170,7 +168,7 @@ class ClientHandler():
             how = '00'
 
         # send_order API를 호출합니다.
-        params = [request_name, screen_no, self.account_number, order_type, 
+        params = [request_name, screen_no, self._account_number, order_type, 
                   order_dict['주식코드'], order_dict['수량'], order_dict['가격'], how, '']
         result = self._ocx.send_order(*params)
         if result == 0:
@@ -181,13 +179,13 @@ class ClientHandler():
             raise RuntimeError(f'!!! 주문 전송에 실패하였습니다. err_code - {result} !!!')
 
     @trace
-    def request_cancel(self, cancel_info_dict: Dict[str, Any], request_name: str) -> None:
+    def request_cancel(self, cancel_info_dict: dict, request_name: str) -> None:
         """
         client으로부터 주문을 취소하겠다는 요청를 받았을 때 호출합니다.
 
         Parameters
         ----------
-        cancel_info_dict : Dict[str, Any]
+        cancel_info_dict : dict
             주문 취소 정보가 들어가있는 dict입니다.
             
             cancel_info_dict = {
@@ -197,7 +195,7 @@ class ClientHandler():
                 '원주문번호': str,
             }
         """
-        screen_no = KiwoomAPIUtils.get_screen_no()
+        screen_no = get_screen_no()
 
         # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
         if cancel_info_dict['구분'] == '매수취소':
@@ -208,7 +206,7 @@ class ClientHandler():
             raise ValueError(f'!!! 유효하지 않은 주문 타입입니다. - {cancel_info_dict["구분"]} !!!')
 
         # send_order API를 호출합니다.
-        params = [request_name, screen_no, self.account_number, order_type, 
+        params = [request_name, screen_no, self._account_number, order_type, 
                   cancel_info_dict['주식코드'], cancel_info_dict['수량'], cancel_info_dict['가격'], '00', cancel_info_dict['원주문번호']]
         result = self._ocx.send_order(*params)
         if result == 0:
@@ -219,7 +217,7 @@ class ClientHandler():
             raise RuntimeError(f'!!! 취소 주문 전송에 실패하였습니다. err_code - {result} !!!')
 
     @trace
-    def request_price_register(self, stock_code_list: List[str], is_add: bool) -> None:
+    def request_price_register(self, stock_code_list: list[str], is_add: bool) -> None:
         """
         client으로부터 실시간 가격정보 등록 요청를 받았을 때 호출합니다.
         
@@ -229,7 +227,7 @@ class ClientHandler():
         self._register_real_time_info(stock_code_list, fid_list, is_add)
     
     @trace
-    def request_ask_bid_register(self, stock_code_list: List[str], is_add: bool) -> None:
+    def request_ask_bid_register(self, stock_code_list: list[str], is_add: bool) -> None:
         """
         client으로부터 실시간 호가정보 등록 요청를 받았을 때 호출합니다.
         
@@ -239,22 +237,22 @@ class ClientHandler():
         self._register_real_time_info(stock_code_list, fid_list, is_add)
 
     @trace
-    def _register_real_time_info(self, stock_code_list: List[str], fid_list: List[str], is_add: bool) -> None:
+    def _register_real_time_info(self, stock_code_list: list[str], fid_list: list[str], is_add: bool) -> None:
         """
         실시간 정보를 받겠다고 등록하는 함수입니다.
 
         Parameters
         ----------
-        stock_code_list : List[str]
+        stock_code_list : list[str]
             실시간 정보를 등록할 종목 코드의 리스트입니다.
-        fid_list : List[str]
+        fid_list : list[str]
             받고 싶은 fid들의 리스트입니다.
             이에 따라 전송되는 실시간 정보의 signal이 달라집니다.
         is_add : bool
             True일시 화면번호에 존재하는 기존의 등록은 사라집니다.
             False일시 기존에 등록된 종목과 함께 실시간 정보를 받습니다.
         """
-        screen_no = KiwoomAPIUtils.get_screen_no()
+        screen_no = get_screen_no()
         
         # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
         if is_add is True:
