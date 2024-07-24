@@ -36,7 +36,14 @@ class Proxy():
         timer.timeout.connect(lambda: None)
 
         # level 매개변수에 따라 로그의 정도를 조절할 수 있습니다.
-        logging.basicConfig(filename='log.txt', level=logging.INFO) 
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            handlers=[
+                logging.FileHandler("debug.log"),
+                logging.StreamHandler()
+            ]
+        )
 
         self._server.listen(QHostAddress(self._address), self._port_number)
         self._server.newConnection.connect(self._start_market)
