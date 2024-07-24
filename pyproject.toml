@@ -3,12 +3,16 @@ name = "kiwoomproxy"
 version = "0.1.0"
 description = ""
 authors = ["joshua5301"]
+license = "GPL-3.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "3.10.*"
 pyqt5 = "5.15.10"
 pyqt5-qt5 = "5.15.2"
+
+[tool.poetry.group.dev.dependencies]
+pyinstaller = "^6.9.0"
 
 [build-system]
 requires = ["poetry-core"]
