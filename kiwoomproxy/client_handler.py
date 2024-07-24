@@ -30,9 +30,9 @@ class ClientHandler():
         self._account_number = None
         self._buffer = ''
         self._socket = socket
-        self._socket.readyRead.connect(self._read_request)
+        self._socket.readyRead.connect(self._handle_requests)
 
-    def _read_request(self):
+    def _handle_requests(self):
         """
         Client의 socket으로부터 요청이 도착했을 때 이를 처리합니다.
         """
@@ -42,8 +42,8 @@ class ClientHandler():
                 line, self._buffer = self._buffer.split('\n', 1)
                 data_dict = json.loads(line)
                 method = getattr(self, data_dict['method'])
-                args = data_dict['args']
-                method(**args)
+                kwargs = data_dict['kwargs']
+                method(**kwargs)
 
     @trace
     def login(self) -> None:
@@ -54,8 +54,8 @@ class ClientHandler():
         if result == 0:
             logger.info('로그인 시도 요청에 성공하였습니다.')
         else:
-            raise ConnectionError(f'!!! 로그인 시도 요청에 실패하였습니다. err_code - {result}')
-            
+            raise ConnectionError(f'로그인 시도 요청에 실패하였습니다. err_code - {result}')
+        
     @trace
     def load_account_number(self) -> None:
         """
@@ -72,7 +72,7 @@ class ClientHandler():
         logger.info('계좌번호 로드가 성공하였습니다.')
     
     @trace
-    def request_condition_name(self) -> None:
+    def get_condition_names(self) -> None:
         """
         client으로부터 조건검색식 요청을 받았을 때 호출합니다.
         
@@ -82,10 +82,10 @@ class ClientHandler():
         if is_success == 1:
             logger.info('조건 검색식 로드 요청이 성공하였습니다.')
         else:
-            raise ConnectionError(f'!!! 조건 검색식 로드 요청이 실패하였습니다. err_code - {is_success} !!!')
+            raise ConnectionError(f'조건 검색식 로드 요청이 실패하였습니다. err_code - {is_success}')
 
     @trace
-    def request_condition_search(self, condition_name: str, condition_index: int) -> None:
+    def get_matching_stocks(self, condition_name: str, condition_index: int) -> None:
         """
         client으로부터 조건검색식과 부합하는 종목 검색 요청을 받았을 때 호출합니다.
 
@@ -101,10 +101,59 @@ class ClientHandler():
         if is_success == 1:
             logger.info('조건검색식에 부합하는 종목검색에 성공하였습니다.')
         else:
-            raise RuntimeError(f'!!! 조건검색식에 부합하는 종목검색에 실패하였습니다. err_code - {is_success} !!!')
+            raise RuntimeError(f'조건검색식에 부합하는 종목검색에 실패하였습니다. err_code - {is_success}')
+        
+    @trace
+    def get_stocks_with_volume_spike(self, criterion: str, request_name: str) -> None:
+        """
+        client으로부터 거래량 급증 주식 조회 요청을 받았을 때 호출합니다.
+        """
+        if criterion == '증가량':
+            criterion = '1'
+        elif criterion == '증가율':
+            criterion = '2'
+        else:
+            raise ValueError(f'유효하지 않은 기준 - {criterion} 입니다.')
+        self._ocx.set_input_value('시장구분', '000')
+        self._ocx.set_input_value('정렬구분', criterion)
+        self._ocx.set_input_value('시간구분', '2')
+        self._ocx.set_input_value('거래량구분', '5')
+        self._ocx.set_input_value('종목조건', '20')
+        self._ocx.set_input_value('가격구분', '0')
+        screen_no = get_screen_no()
+        result = self._ocx.comm_rq_data(request_name, 'opt10023', 0, screen_no)
+        if result == 0:
+            logger.info('거래량 급증 주식 조회에 성공하였습니다.')
+        else:
+            raise RuntimeError(f'거래량 급증 주식 조회에 실패하였습니다. err_code - {result}')
+        
+    @trace
+    def get_price_info(self, stock_code: str, request_name: str):
+        """
+        주식 기본 정보 요청을 받았을 때 호출합니다.
+        """
+        self._ocx.set_input_value('종목코드', stock_code)
+        screen_no = get_screen_no()
+        result = self._ocx.comm_rq_data(request_name, 'opt10001', 0, screen_no)
+        if result == 0:
+            logger.info('주식 기본 정보 요청을 성공하였습니다.')
+        else:
+            raise RuntimeError(f'주식 기본 정보 요청에 실패하였습니다. err_code - {result}')
 
     @trace
-    def request_deposit(self, request_name: str) -> None:
+    def get_ask_bid_info(self, stock_code: str, request_name: str):
+        """
+        주식 호가 정보 요청을 받았을 때 호출합니다.
+        """
+        self._ocx.set_input_value('종목코드', stock_code)
+        screen_no = get_screen_no()
+        result = self._ocx.comm_rq_data(request_name, 'opt10004', 0, screen_no)
+        if result == 0:
+            logger.info('주식 호가 정보 요청을 성공하였습니다.')
+        else:
+            raise RuntimeError(f'주식 호가 정보 요청에 실패하였습니다. err_code - {result}')
+    @trace
+    def get_deposit(self, request_name: str) -> None:
         """
         client으로부터 주문가능금액 조회 요청을 받았을 때 호출합니다.
         """
@@ -116,10 +165,10 @@ class ClientHandler():
         if result == 0:
             logger.info('주문가능금액 조회에 성공하였습니다.')
         else:
-            raise RuntimeError(f'!!! 주문가능금액 조회에 실패하였습니다. err_code - {result} !!!')
+            raise RuntimeError(f'주문가능금액 조회에 실패하였습니다. err_code - {result}')
     
     @trace
-    def request_balance(self, request_name: str) -> None:
+    def get_balance(self, request_name: str) -> None:
         """
         client으로부터 보유주식 조회 요청을 받았을 때 호출합니다.
         """
@@ -131,10 +180,10 @@ class ClientHandler():
         if result == 0:
             logger.info('보유주식 조회 요청에 성공하였습니다.')
         else:
-            raise RuntimeError(f'!!! 보유주식 조회 요청에 실패하였습니다. err_code - {result}!!!')
+            raise RuntimeError(f'보유주식 조회 요청에 실패하였습니다. err_code - {result}')
     
     @trace
-    def request_order(self, order_dict: dict, request_name: str) -> None:
+    def send_order(self, order_dict: dict, request_name: str) -> None:
         """
         client으로부터 주문을 전송하겠다는 요청을 받았을 때 호출합니다.
         Parameters
@@ -158,12 +207,12 @@ class ClientHandler():
         elif order_dict['구분'] == '매도':
             order_type = 2
         else:
-            raise ValueError(f'!!! 유효하지 않은 주문 타입입니다. - {order_dict["구분"]} !!!')
+            raise ValueError(f'유효하지 않은 주문 타입입니다. - {order_dict["구분"]}')
 
         if order_dict['시장가'] is True:
             how = '03'
             if order_dict['가격'] != 0:
-                raise ValueError('!!! 시장가 주문의 경우 가격을 0으로 설정해야 합니다. !!!')
+                raise ValueError('시장가 주문의 경우 가격을 0으로 설정해야 합니다.')
         else:
             how = '00'
 
@@ -174,21 +223,21 @@ class ClientHandler():
         if result == 0:
             logger.info('정상적으로 주문이 전송되었습니다.')
         elif result == -308:
-            raise ConnectionError('!!! 너무 많은 주문이 동시에 전송되어 실패하였습니다. (최대 1초에 5번) !!!')
+            raise ConnectionError('너무 많은 주문이 동시에 전송되어 실패하였습니다. (최대 1초에 5번)')
         else:
-            raise RuntimeError(f'!!! 주문 전송에 실패하였습니다. err_code - {result} !!!')
+            raise RuntimeError(f'주문 전송에 실패하였습니다. err_code - {result}')
 
     @trace
-    def request_cancel(self, cancel_info_dict: dict, request_name: str) -> None:
+    def cancel_order(self, order_dict: dict, request_name: str) -> None:
         """
         client으로부터 주문을 취소하겠다는 요청를 받았을 때 호출합니다.
 
         Parameters
         ----------
-        cancel_info_dict : dict
+        order_dict : dict
             주문 취소 정보가 들어가있는 dict입니다.
             
-            cancel_info_dict = {
+            order_dict = {
                 '구분': '매수취소' or '매도취소',
                 '주식코드': str,
                 '수량': int,
@@ -198,26 +247,26 @@ class ClientHandler():
         screen_no = get_screen_no()
 
         # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
-        if cancel_info_dict['구분'] == '매수취소':
+        if order_dict['구분'] == '매수취소':
             order_type = 3
-        elif cancel_info_dict['구분'] == '매도취소':
+        elif order_dict['구분'] == '매도취소':
             order_type = 4
         else:
-            raise ValueError(f'!!! 유효하지 않은 주문 타입입니다. - {cancel_info_dict["구분"]} !!!')
+            raise ValueError(f'유효하지 않은 주문 타입입니다. - {order_dict["구분"]}')
 
         # send_order API를 호출합니다.
         params = [request_name, screen_no, self._account_number, order_type, 
-                  cancel_info_dict['주식코드'], cancel_info_dict['수량'], cancel_info_dict['가격'], '00', cancel_info_dict['원주문번호']]
+                  order_dict['주식코드'], order_dict['수량'], 0, '00', order_dict['원주문번호']]
         result = self._ocx.send_order(*params)
         if result == 0:
             logger.info('정상적으로 취소 주문이 전송되었습니다.')
         elif result == -308:
-            raise ConnectionError('!!! 너무 많은 주문이 동시에 전송되어 실패하였습니다. (최대 1초에 5번) !!!')
+            raise ConnectionError('너무 많은 주문이 동시에 전송되어 실패하였습니다. (최대 1초에 5번)')
         else:
-            raise RuntimeError(f'!!! 취소 주문 전송에 실패하였습니다. err_code - {result} !!!')
+            raise RuntimeError(f'취소 주문 전송에 실패하였습니다. err_code - {result}')
 
     @trace
-    def request_price_register(self, stock_code_list: list[str], is_add: bool) -> None:
+    def register_price_info(self, stock_code_list: list[str], is_add: bool) -> None:
         """
         client으로부터 실시간 가격정보 등록 요청를 받았을 때 호출합니다.
         
@@ -227,7 +276,7 @@ class ClientHandler():
         self._register_real_time_info(stock_code_list, fid_list, is_add)
     
     @trace
-    def request_ask_bid_register(self, stock_code_list: list[str], is_add: bool) -> None:
+    def register_ask_bid_info(self, stock_code_list: list[str], is_add: bool) -> None:
         """
         client으로부터 실시간 호가정보 등록 요청를 받았을 때 호출합니다.
         
@@ -271,4 +320,4 @@ class ClientHandler():
         if result == 0:
             logger.info('실시간 정보가 정상적으로 등록되었습니다.')
         else:
-            raise RuntimeError(f'!!! 등록에 실패하였습니다. err_code - {result} !!!')
+            raise RuntimeError(f'등록에 실패하였습니다. err_code - {result}')
