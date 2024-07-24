@@ -26,6 +26,18 @@ class KiwoomOCX(QAxWidget):
         """
         result = self.dynamicCall('CommConnect()')
         return result
+    
+    def get_connect_state(self) -> int:
+        """
+        키움증권에 로그인 되었는지 확인합니다.
+
+        Returns
+        -------
+        int
+            로그인이 되어있는 상태라면 1을, 그렇지 않으면 0을 리턴합니다.
+        """
+        result = self.dynamicCall('GetConnectState()')
+        return result
 
     def get_login_info(self, info_type: str) -> str:
         """
