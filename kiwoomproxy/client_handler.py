@@ -2,8 +2,8 @@ import logging
 import json
 from PyQt5.QtNetwork import QTcpSocket
 
-from .utils import trace, get_screen_no
-from .kiwoom_api_const import KOR_NAME_TO_FID
+from .utils import *
+from .kiwoom_api_const import *
 from .kiwoom_ocx import KiwoomOCX
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class ClientHandler():
     @trace
     def login(self) -> None:
         """
-        clinet으로부터 로그인 시도 요청을 받았을 때 호출합니다.
+        Clinet으로부터 로그인 시도 요청을 받았을 때 호출합니다.
         """
         result = self._ocx.comm_connect()
         if result == 0:
@@ -76,7 +76,7 @@ class ClientHandler():
         """
         client으로부터 조건검색식 요청을 받았을 때 호출합니다.
         
-        조건검색식을 로드 후 ServerSignalHandler 측에서 각 검색식의 이름과 인덱스를 가져옵니다.
+        조건검색식을 로드 후 ServerHandler 측에서 각 검색식의 이름과 인덱스를 가져옵니다.
         """
         is_success = self._ocx.get_condition_load()
         if is_success == 1:
@@ -126,7 +126,7 @@ class ClientHandler():
             logger.info('거래량 급증 주식 조회에 성공하였습니다.')
         else:
             raise RuntimeError(f'거래량 급증 주식 조회에 실패하였습니다. err_code - {result}')
-        
+    
     @trace
     def get_price_info(self, stock_code: str, request_name: str):
         """
@@ -201,7 +201,7 @@ class ClientHandler():
         """
         screen_no = get_screen_no()
         
-        # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
+        # 받은 argument들을 Open API 인터페이스에 맞도록 다듬어줍니다.
         if order_dict['구분'] == '매수':
             order_type = 1
         elif order_dict['구분'] == '매도':
@@ -246,7 +246,7 @@ class ClientHandler():
         """
         screen_no = get_screen_no()
 
-        # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
+        # 받은 argument들을 Open API 인터페이스에 맞도록 다듬어줍니다.
         if order_dict['구분'] == '매수취소':
             order_type = 3
         elif order_dict['구분'] == '매도취소':
@@ -303,7 +303,7 @@ class ClientHandler():
         """
         screen_no = get_screen_no()
         
-        # arguments들을 Open API 인터페이스에 맞도록 다듬어줍니다.
+        # 받은 argument들을 Open API 인터페이스에 맞도록 다듬어줍니다.
         if is_add is True:
             is_add = '1'
         elif is_add is False:

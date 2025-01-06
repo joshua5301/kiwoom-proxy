@@ -2,4 +2,4 @@ __pycache__/
 /debug.log
 /build/
 /dist/
-/start.spec
+/start_kiwoom_proxy.spec

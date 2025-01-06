@@ -12,9 +12,9 @@ from .server_handler import ServerHandler
 class Proxy():
 
     def __init__(self):
-        self._address = '127.0.0.1'
-        self._port_number = 53939
         self._server = QTcpServer()
+        self._address = None
+        self._port_number = None
         self._socket = None
         self._client_handler = None
         self._server_handler = None       
@@ -25,7 +25,7 @@ class Proxy():
     def set_address(self, address: str):
         self._address = address
 
-    def initialize(self):
+    def start(self, log_level: str = 'ERROR'):
         app = QApplication([])
 
         # Ctrl + C로 프로그램을 강제 종료하기 위해 100ms마다 종료 신호를 감지합니다.
@@ -35,9 +35,11 @@ class Proxy():
         timer.start(100)
         timer.timeout.connect(lambda: None)
 
-        # level 매개변수에 따라 로그의 정도를 조절할 수 있습니다.
+        # 터미널과 파일에 로그를 기록합니다.
+        # level 매개변수에 따라 기록의 정도를 조절할 수 있습니다.
+        log_level = getattr(logging, log_level)
         logging.basicConfig(
-            level=logging.INFO,
+            level=log_level,
             format="%(asctime)s [%(levelname)s] %(message)s",
             handlers=[
                 logging.FileHandler("debug.log"),

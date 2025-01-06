@@ -1,10 +1,9 @@
 import logging
 import json
-import datetime
 from PyQt5.QtNetwork import QTcpSocket
 
-from .utils import trace
-from .kiwoom_api_const import KOR_NAME_TO_FID, FID_TO_KOR_NAME
+from .utils import *
+from .kiwoom_api_const import *
 from .kiwoom_ocx import KiwoomOCX
 
 logger = logging.getLogger(__name__)
@@ -82,8 +81,7 @@ class ServerHandler():
         """
         # 주문 가능 금액 요청
         if tr_code == 'opw00001':
-            deposit = self._ocx.get_comm_data(tr_code, request_name, 0, '주문가능금액')
-            deposit = int(deposit)
+            deposit = clean_integer(self._ocx.get_comm_data(tr_code, request_name, 0, '주문가능금액'))
             tr_result = deposit
         
         # 보유 주식 요청
@@ -91,45 +89,46 @@ class ServerHandler():
             balance_dict = {}
             info_num = self._ocx.get_repeat_cnt(tr_code, tr_name)
             for i in range(info_num):
-                stock_code = self._ocx.get_comm_data(tr_code, request_name, i, '종목번호')
-                stock_name = self._ocx.get_comm_data(tr_code, request_name, i, '종목명')
-                amount = self._ocx.get_comm_data(tr_code, request_name, i, '보유수량')
-                available_amount = self._ocx.get_comm_data(tr_code, request_name, i, '매매가능수량')
-                purchased_price = self._ocx.get_comm_data(tr_code, request_name, i, '매입가')
-                
+                stock_code = clean_string(self._ocx.get_comm_data(tr_code, request_name, i, '종목번호'))
+                stock_name = clean_string(self._ocx.get_comm_data(tr_code, request_name, i, '종목명'))
+                amount = clean_integer(self._ocx.get_comm_data(tr_code, request_name, i, '보유수량'))
+                available_amount = clean_integer(self._ocx.get_comm_data(tr_code, request_name, i, '매매가능수량'))
+                purchased_price = clean_integer(self._ocx.get_comm_data(tr_code, request_name, i, '매입가'))
+
                 # stock_code의 맨 앞 문자는 주식의 구분 알파벳이므로 제외합니다.
-                balance_dict[stock_code.strip()[1:]] = {
-                    '종목코드': stock_code.strip()[1:],
-                    '종목명': stock_name.strip(),
-                    '보유수량': int(amount),
-                    '주문가능수량': int(available_amount),
-                    '매입단가': int(purchased_price),
+                stock_code = stock_code[1:]
+
+                balance_dict[stock_code] = {
+                    '종목코드': stock_code,
+                    '종목명': stock_name,
+                    '보유수량': amount,
+                    '주문가능수량': available_amount,
+                    '매입단가': purchased_price,
                 }
             tr_result = balance_dict
         
         # 주식 기본 정보 요청
         elif tr_code == 'opt10001':
-            cur_price = self._ocx.get_comm_data(tr_code, request_name, 0, '현재가')
-            start_price = self._ocx.get_comm_data(tr_code, request_name, 0, '시가')
-            high_price = self._ocx.get_comm_data(tr_code, request_name, 0, '고가')
-            low_price = self._ocx.get_comm_data(tr_code, request_name, 0, '저가')
+            cur_price = clean_integer(self._ocx.get_comm_data(tr_code, request_name, 0, '현재가'))
+            start_price = clean_integer(self._ocx.get_comm_data(tr_code, request_name, 0, '시가'))
+            high_price = clean_integer(self._ocx.get_comm_data(tr_code, request_name, 0, '고가'))
+            low_price = clean_integer(self._ocx.get_comm_data(tr_code, request_name, 0, '저가'))
             info_dict = {
-                '현재가': int(cur_price.strip('+- ')),
-                '시가': int(start_price.strip('+- ')),
-                '고가': int(high_price.strip('+- ')),
-                '저가': int(low_price.strip('+- ')),
+                '현재가': cur_price,
+                '시가': start_price,
+                '고가': high_price,
+                '저가': low_price,
             }
             tr_result = info_dict
         
         # 주식 호가 정보 요청
         elif tr_code == 'opt10004':
-            # 매수/매도 호가 정보를 각각 RANGE개 기록합니다.
-            RANGE = 10
             bid_info_list = []
             ask_info_list = []
-            orders = ['최우선'] + [f'{i}차선' for i in range(2, RANGE + 1)]
+            orders = ['최우선'] + [f'{i}차선' for i in range(2, 11)]
+            # 키움증권 API가 6차선 때만 특별한 이유없이 일관성이 깨집니다.
             for order in orders:
-                # 도대체 왜 6번째만 차선이 아니라 우선인거야...
+                # 매수6차선호가 매수6차선잔량 (X), 매수6우선호가 매수6우선잔량 (O)
                 if order == '6차선':
                     order = '6우선'
                 cur_bid_price = self._ocx.get_comm_data(tr_code, request_name, 0, f'매수{order}호가')
@@ -137,7 +136,7 @@ class ServerHandler():
                 bid_info_list.append((int(cur_bid_price.strip('+- ')), int(cur_bid_amount.strip('+- '))))
             for order in orders:
                 cur_ask_price = self._ocx.get_comm_data(tr_code, request_name, 0, f'매도{order}호가')
-                # 얘는 왜 하나만 우선임?...
+                # 매도6차선잔량 (X), 매도6우선잔량 (O)
                 if order == '6차선':
                     order = '6우선'
                 cur_ask_amount = self._ocx.get_comm_data(tr_code, request_name, 0, f'매도{order}잔량')
@@ -153,18 +152,16 @@ class ServerHandler():
             stock_codes = []
             info_num = self._ocx.get_repeat_cnt(tr_code, tr_name)
             for i in range(info_num):
-                stock_code = self._ocx.get_comm_data(tr_code, request_name, i, '종목코드')
-                stock_codes.append(stock_code.strip())
+                stock_code = clean_string(self._ocx.get_comm_data(tr_code, request_name, i, '종목코드'))
+                stock_codes.append(stock_code)
             tr_result = stock_codes
 
-        
         # 주문 요청
         elif (tr_code == 'KOA_NORMAL_BUY_KP_ORD' or tr_code == 'KOA_NORMAL_SELL_KP_ORD' or
              tr_code == 'KOA_NORMAL_BUY_KQ_ORD' or tr_code == 'KOA_NORMAL_SELL_KQ_ORD' or
              tr_code == 'KOA_NORMAL_KP_CANCEL' or tr_code == 'KOA_NORMAL_KQ_CANCEL'):
-                 
-            # 주문 번호를 저장합니다.
-            order_number = self._ocx.get_comm_data(tr_code, request_name, 0, '주문번호')
+            # 주문 요청이 들어오면 주문 번호를 받고 보냅니다.
+            order_number = clean_string(self._ocx.get_comm_data(tr_code, request_name, 0, '주문번호'))
             tr_result = order_number
             
         else:
@@ -195,9 +192,8 @@ class ServerHandler():
         result = self._ocx.get_condition_name_list()
         index_and_name_list = result.split(';')[:-1]
         for index_and_name in index_and_name_list:
-            index = int(index_and_name.split('^')[0])
-            name = index_and_name.split('^')[1]
-            condition_list.append({'name': name, 'index': index})
+            index, name = index_and_name.split('^')
+            condition_list.append({'name': name, 'index': int(index)})
         self._send_to_client({'type': 'condition_names', 'key': '', 'value': condition_list})
 
     @trace
@@ -243,70 +239,75 @@ class ServerHandler():
         """
         # 체결 관련 데이터
         if data_type == '0':
-            stock_code = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드'])
-            stock_name = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목명'])
-            order_status = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문상태'])
-            order_type = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문구분'])
-            order_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문수량'])
-            traded_price = self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결가'])
-            traded_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결량'])
-            nontraded_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['미체결수량'])
-            order_number = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문번호'])
-
-            if order_status.strip() == '접수':
-                # 미체결 클리어 신호
-                if int(nontraded_amount.strip('+- ')) == 0:
+            order_number = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문번호']))
+            stock_code = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드']))
+            stock_name = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목명']))
+            order_status = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문상태']))
+            order_type = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문구분']))
+            order_amount = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문수량']))
+            traded_price = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결가']))
+            traded_amount = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['체결량']))
+            nontraded_amount = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['미체결수량']))
+            
+            if order_status == '접수':
+                # 다른 접수 신호는 무시하고 미체결 클리어 신호만 처리합니다.
+                if nontraded_amount == 0:
                     info_dict = {
-                        '종목코드': stock_code.strip(),
-                        '종목명': stock_name.strip(),
-                        '주문상태': order_status.strip('+- '),
-                        '주문구분': order_type.strip(),
-                        '주문수량': int(order_amount.strip('+- ')),
+                        '종목코드': stock_code,
+                        '종목명': stock_name,
+                        '주문상태': order_status,
+                        '주문구분': order_type,
+                        '주문수량': order_amount,
                         '체결가': 0,
                         '체결량': 0,
-                        '미체결량': 0,
-                        '주문번호': order_number.strip(),
+                        '미체결수량': 0,
+                        '주문번호': order_number,
                     }
-                    self._send_to_client({'type': 'order_result', 'key': order_number.strip(), 'value': info_dict})
+                    self._send_to_client({'type': 'order_result', 'key': order_number, 'value': info_dict})
 
-            elif order_status.strip() == '확인':
-                if order_type.strip() == '매수취소' or order_type.strip() == '매도취소':
-                    self._send_to_client({'type': 'order_result', 'key': order_number.strip(), 'value': {}})
+            elif order_status == '확인':
+                if order_type == '매수취소' or order_type == '매도취소':
+                    self._send_to_client({'type': 'order_result', 'key': order_number, 'value': {}})
                 else:
                     raise NotImplementedError(f'예상치 못한 주문구분 - {order_type} 입니다.')
-            elif order_status.strip('+- ') == '체결':
-                info_dict = {
-                    '종목코드': stock_code.strip(),
-                    '종목명': stock_name.strip(),
-                    '주문상태': order_status.strip('+- '),
-                    '주문구분': order_type.strip('+- '),
-                    '주문수량': int(order_amount.strip('+- ')),
-                    '체결가': int(traded_price.strip('+- ')),
-                    '체결량': int(traded_amount.strip('+- ')),
-                    '미체결량': int(nontraded_amount.strip('+- ')),
-                    '주문번호': order_number.strip(),
-                }
-                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 일부 혹인 완전히 체결되었습니다.')
-                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 체결량: {info_dict["체결량"]}, 주문수량: {info_dict["주문수량"]}')
-                self._send_to_client({'type': 'order_result', 'key': order_number.strip(), 'value': info_dict})
-            else:
-                raise NotImplementedError(f'확인되지 않은 주문 상태 - {order_status.strip()}입니다.')
             
+            elif order_status == '체결':
+                info_dict = {
+                    '종목코드': stock_code,
+                    '종목명': stock_name,
+                    '주문상태': order_status,
+                    '주문구분': order_type,
+                    '주문수량': order_amount,
+                    '체결가': traded_price,
+                    '체결량': traded_amount,
+                    '미체결수량': nontraded_amount,
+                    '주문번호': order_number,
+                }
+                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 주문이 일부 혹은 완전히 체결되었습니다.')
+                logger.info(f'{info_dict["종목코드"]} {info_dict["종목명"]} - 체결량: {info_dict["체결량"]}, 주문수량: {info_dict["주문수량"]}')
+                
+                # 주문이 완전히 체결되었을 때만 보냅니다.
+                if nontraded_amount == 0:
+                    self._send_to_client({'type': 'order_result', 'key': order_number, 'value': info_dict})
+            
+            else:
+                raise NotImplementedError(f'확인되지 않은 주문 상태 - {order_status}입니다.')
 
         # 잔고 관련 데이터
         elif data_type == '1':
-            stock_code = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드'])
-            stock_name = self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목명'])
-            total_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['보유수량'])
-            available_amount = self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문가능수량'])
-            avg_buy_price = self._ocx.get_chejan_data(KOR_NAME_TO_FID['매입단가'])
+            stock_code = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목코드']))
+            stock_name = clean_string(self._ocx.get_chejan_data(KOR_NAME_TO_FID['종목명']))
+            total_amount = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['보유수량']))
+            available_amount = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['주문가능수량']))
+            avg_buy_price = clean_integer(self._ocx.get_chejan_data(KOR_NAME_TO_FID['매입단가']))
 
+            # 종목코드 맨 앞의 속성 구분 알파벳은 제거합니다.
             info_dict = {
-                '종목코드': stock_code.strip()[1:],
-                '종목명': stock_name.strip(),
-                '보유수량': int(total_amount.strip('+- ')),
-                '주문가능수량': int(available_amount.strip('+- ')),
-                '매입단가': int(avg_buy_price.strip('+- ')),
+                '종목코드': stock_code[1:],
+                '종목명': stock_name,
+                '보유수량': total_amount,
+                '주문가능수량': available_amount,
+                '매입단가': avg_buy_price,
             }
             self._send_to_client({'type': 'balance_change', 'key': info_dict['종목코드'], 'value': info_dict})
 
@@ -326,38 +327,36 @@ class ServerHandler():
             받은 실시간 데이터가 어떤 종류인지 나타냅니다.
         """
         
-        # 실시간 가격 정보를 등록한 뒤 주식이 체결되었을 때 발생하는 signal입니다.
+        # 실시간 가격 정보를 등록한 뒤 주식이 체결되었을 때 발생하는 신호
+        # '체결 시간'은 HHMMSS의 문자열 포맷으로 전달됩니다.
         if signal_type == '주식체결':
-            # 체결 시간은 HHMMSS의 문자열 포맷으로 전달됩니다.
-            cur_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['현재가'])
-            start_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['시가'])
-            high_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['고가'])
-            low_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['저가'])
+            cur_price = clean_integer(self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['현재가']))
+            start_price = clean_integer(self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['시가']))
+            high_price = clean_integer(self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['고가']))
+            low_price = clean_integer(self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['저가']))
             info_dict = {
-                '현재가': int(cur_price.strip('+- ')),
-                '시가': int(start_price.strip('+- ')),
-                '고가': int(high_price.strip('+- ')),
-                '저가': int(low_price.strip('+- ')),
+                '현재가': cur_price,
+                '시가': start_price,
+                '고가': high_price,
+                '저가': low_price,
             }
             self._send_to_client({'type': 'price_change', 'key': stock_code, 'value': info_dict})
 
 
-        # 실시간 호가정보를 등록한 뒤 호가의 변경이 일어났을 때 발생하는 signal입니다.
+        # 실시간 호가정보를 등록한 뒤 호가의 변경이 일어났을 때 발생하는 신호
         elif signal_type == '주식호가잔량':
-            # 매수/매도 호가 정보를 각각 RANGE개 기록합니다.
-            RANGE = 10
             bid_info_list = []
             ask_info_list = []
-            for num in range(1, RANGE + 1):
-                cur_bid_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['매수호가' + str(num)])
-                cur_bid_amount = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['매수호가 수량' + str(num)])
-                bid_info_list.append((int(cur_bid_price.strip('+- ')), int(cur_bid_amount.strip('+- '))))
-
-            for num in range(1, RANGE + 1):
-                cur_ask_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['매도호가' + str(num)])
-                cur_ask_amount = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID['매도호가 수량' + str(num)])
-                ask_info_list.append((int(cur_ask_price.strip('+- ')), int(cur_ask_amount.strip('+- '))))
-
+            for num in range(10):
+                cur_bid_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID[f'매수호가{num + 1}'])
+                cur_bid_amount = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID[f'매수호가 수량{num + 1}'])
+                cur_bid_price, cur_bid_amount = clean_integer(cur_bid_price), clean_integer(cur_bid_amount)
+                bid_info_list.append((cur_bid_price, cur_bid_amount))
+            for num in range(10):
+                cur_ask_price = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID[f'매도호가{num + 1}'])
+                cur_ask_amount = self._ocx.get_comm_real_data(stock_code, KOR_NAME_TO_FID[f'매도호가 수량{num + 1}'])
+                cur_ask_price, cur_ask_amount = clean_integer(cur_ask_price), clean_integer(cur_ask_amount)
+                ask_info_list.append((cur_ask_price, cur_ask_amount))
             info_dict = {
                 '매수호가정보': bid_info_list,
                 '매도호가정보': ask_info_list,
@@ -370,17 +369,21 @@ class ServerHandler():
         # 장외주식체결
         elif signal_type == 'ECN주식체결':
             pass
-        # 동시 호가시 예상되는 체결 관련 정보인듯?
+        # 동시 호가시 예상되는 체결 관련 정보
         elif signal_type == '주식예상체결':
             pass
+        # 장 시작하기 이전에 보내지는 신호
         elif signal_type == '장시작시간':
             pass
+        # 최우선호가 정보
+        elif signal_type == '주식우선호가':
+            pass
         else:
-            logger.warning(f'예상치 못한 signal_type - {signal_type}이 전송되었습니다.')
+            logger.debug(f'예상치 못한 signal_type - {signal_type}이 전송되었습니다.')
     
     @trace
     def _server_msg_handler(self, screen_no: str, request_name: str, tr_code: str, msg: str) -> None:
         """
         서버로부터 메세지를 전송받았을 때 동작하는 핸들러입니다.
         """
-        logger.info(f'SERVER MSG: \'{request_name}\'로부터 \'{msg}\'를 전송받았습니다.')
+        logger.info(f'SERVER MSG: "{request_name}"로부터 "{msg}"를 전송받았습니다.')
